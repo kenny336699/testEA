@@ -1,0 +1,20 @@
+{
+  "name": "new-folder",
+  "version": "1.0.0",
+  "description": "\"# testEA\"",
+  "homepage": "https://github.com/kenny336699/testEA#readme",
+  "bugs": {
+    "url": "https://github.com/kenny336699/testEA/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenny336699/testEA.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
