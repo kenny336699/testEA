@@ -11,7 +11,10 @@ EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading s
 - Multi-timeframe confirmation (M5 and M15)
 - Smart money management with win/loss lot adjustment
 - Pyramiding support with risk-based position sizing
-- Partial profit taking at multiple levels
+- Multiple partial profit taking mechanisms:
+  - RSI-EMA momentum reversal exit (RSI 70 → EMA10 pullback)
+  - R-based retracement exit (TP1)
+  - Structure-based exit (TP2 at EMA200/20-bar high)
 - Trailing exit strategy
 
 ## Tech Stack
@@ -19,7 +22,7 @@ EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading s
 - **Language**: MQL5 (MetaQuotes Language 5)
 - **Platform**: MetaTrader 5
 - **Trading Library**: Trade.mqh
-- **Version**: 3.92
+- **Version**: 3.93
 
 ## Project Conventions
 
@@ -34,10 +37,11 @@ EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading s
 ### Architecture Patterns
 
 - **Event-Driven**: OnInit(), OnTick(), OnDeinit(), OnTradeTransaction()
-- **State Management**: PositionState struct to track position metadata
+- **State Management**: PositionState struct to track position metadata and TP execution flags
+- **Modular Design**: Separated into Signal, Risk, and TradeManager classes
 - **Indicator Management**: Separate handles and buffers for each indicator
 - **Visual Feedback**: Optional chart objects for signal visualization
-- **Modular Functions**: Separate functions for entry signals, position management, lot sizing
+- **Encapsulation**: Each module handles its own initialization, logic, and cleanup
 
 ### Testing Strategy
 
@@ -45,6 +49,8 @@ EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading s
 - Forward test on demo account before live deployment
 - Monitor R multiples and partial close counts
 - Track RSI hit 70 events and max R reached metrics
+- Validate modular functionality independently
+- Test edge cases like minimum lot sizes and volume validation
 
 ### Git Workflow
 
@@ -67,9 +73,11 @@ EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading s
 
 **Exit Strategy**:
 
-- First TP (50%): RSI hit 70 + pullback to EMA10, OR reached target high, OR reached EMA200, OR pullback protection
-- Second TP (remaining): RSI extreme + below EMA10, OR below EMA20
-- Stop loss moved to breakeven after first TP
+- **RSI-EMA TP** (first priority): When RSI crosses 70 and price returns to EMA10, close 50%
+- **TP1** (R-based): When `max_r_reached >= 0.5` and profit falls below `0.05R`, close 50%
+- **TP2** (structure-based): When price reaches EMA200 or 20-bar historical high, close 50% and move SL to breakeven
+- **Final Exit**: RSI extreme (>75) + price below EMA10, OR price below EMA20
+- Stop loss moved to breakeven after any partial TP execution
 
 ### Key Parameters
 
@@ -90,12 +98,40 @@ EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading s
 - **Minimum Lot**: Configurable via InpMinLots (default 0.04)
 - **Slippage Tolerance**: 20 points default
 - **Order Expiry**: Pending orders expire after 1 bar
-- **Position Tracking**: Uses comment field to store R distance and target high
+- **Position Tracking**: Uses position state structure to store R distance, target high, RSI overbought flags, and TP execution status
 - **Visual Objects**: Prefixed with "Signal*" and "Setup*"
+- **Modular Architecture**: Code split into Defines.mqh, Signal.mqh, Risk.mqh, and TradeManager.mqh
+- **State Management**: Each position maintains `has_hit_rsi_70` and TP execution flags to prevent duplicate exits
 
 ## External Dependencies
 
 - MetaTrader 5 platform
 - Trade.mqh library (standard MT5 library)
 - Broker with symbol data and order execution capabilities
-- Indicators: iMA (EMA), iRSI (RSI)
+- Indicators: iMA (EMA), iRSI (RSI), iHigh (historical highs)
+
+## Project Structure
+
+```
+EMA_Pullback/
+├── EMA_Pullback_Pro_v3.93.mq5    # Main EA file with OnInit/OnTick/OnDeinit
+├── Defines.mqh                    # Version constants and shared definitions
+├── Signal.mqh                     # CSignalManager class - entry signals, MTF filter, indicator management
+├── Risk.mqh                       # CRiskManager class - lot sizing, win/loss adjustment
+├── TradeManager.mqh               # CTradeManager class - position management, TP logic, order placement
+└── openspec/                      # Specification and design documentation
+    ├── project.md                 # This file - project overview
+    ├── AGENTS.md                  # AI agent guidelines
+    └── specs/
+        └── exit-management/
+            └── spec.md            # Exit management requirements (RSI-EMA TP)
+```
+
+## Recent Changes
+
+### v3.93 - Modular Refactoring and RSI-EMA TP
+
+- **Modularization**: Split monolithic EA into Signal, Risk, and TradeManager classes
+- **RSI-EMA Partial TP**: Added new exit mechanism triggering when RSI crosses 70 then price returns to EMA10
+- **State Tracking**: Enhanced PositionState structure with `has_hit_rsi_70` flag
+- **Code Organization**: Improved separation of concerns and maintainability
