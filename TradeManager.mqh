@@ -197,6 +197,9 @@ void CTradeManager::PlaceOrder(const SignalResult &signal) {
 //+------------------------------------------------------------------+
 //| 管理持倉                                                         |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| 管理持倉 (已更新: 1R 保本機制)                                   |
+//+------------------------------------------------------------------+
 void CTradeManager::ManageOpenPositions() {
    CleanupPositionStates();
    
@@ -216,6 +219,8 @@ void CTradeManager::ManageOpenPositions() {
       double r_val = ParseRFromComment(comment);
       double target_high = ParseHighFromComment(comment);
       if(r_val <= 0) r_val = openPrice * 0.005;
+      
+      // 注意: 這裡我們雖然解析了 target_high，但新的邏輯中我們優先看 R 倍數
       if(target_high <= 0) target_high = iHigh(_Symbol, PERIOD_CURRENT, iHighest(_Symbol, PERIOD_CURRENT, MODE_HIGH, 20, 1));
       
       int stateIdx = GetStateIndex(ticket, openPrice, r_val, target_high);
@@ -235,38 +240,38 @@ void CTradeManager::ManageOpenPositions() {
       
       double close1 = iClose(_Symbol, PERIOD_CURRENT, 1);
       
-      //=== 第一次部分平倉 (50%) ===
+     //=== 第一次部分平倉 (50%) ===
       if(m_posStates[stateIdx].partial_close_count == 0) {
          bool triggerFirstTP = false;
          string tpReason = "";
          
-         // 條件A: RSI曾達70，價格回落至EMA10
-         if(m_posStates[stateIdx].has_hit_rsi_70 && close1 <= m_signal.GetEMA10(1)) {
+         // [優先級 1] 硬指標：獲利達到 1R，直接落袋為安 (最強的安全鎖)
+         // 這能確保在上升途中就出場，而不是等跌回 EMA10 才出
+         if(profitR >= 1.0) {
             triggerFirstTP = true;
-            tpReason = "RSI-EMA TP (RSI hit 70 -> back to EMA10)";
+            tpReason = "Secure Profit 1R (Anti-Reversal)";
          }
-         // 條件B: 達到目標前高
-         else if(currentPrice >= m_posStates[stateIdx].target_high) {
-            triggerFirstTP = true;
-            tpReason = "Target High TP @ " + DoubleToString(m_posStates[stateIdx].target_high, _Digits);
-         }
-         // 條件C: 達到EMA200 (若在進場價上方)
+         // [優先級 2] 硬指標：碰到 EMA200 壓力位
          else if(m_signal.GetEMA200(0) > openPrice && currentPrice >= m_signal.GetEMA200(0)) {
             triggerFirstTP = true;
             tpReason = "EMA200 TP @ " + DoubleToString(m_signal.GetEMA200(0), _Digits);
          }
-         // 條件D: 回撤保護 (曾達0.5R，回落至0.05R以下)
+         // [優先級 3] 技術指標：RSI 過熱後回檔 (這是當利潤還沒到 1R 時的輔助出場)
+         else if(m_posStates[stateIdx].has_hit_rsi_70 && close1 <= m_signal.GetEMA10(1)) {
+            triggerFirstTP = true;
+            tpReason = "RSI-EMA TP (RSI hit 70 -> back to EMA10)";
+         }
+         // [優先級 4] 失敗保護：賺了又吐回去
          else if(m_posStates[stateIdx].max_r_reached >= 0.5 && profitR < 0.05) {
             triggerFirstTP = true;
             tpReason = "Pullback Protection (MaxR=" + DoubleToString(m_posStates[stateIdx].max_r_reached, 2) + ")";
          }
-         
          if(triggerFirstTP) {
             double closeVol = m_risk.GetSafeCloseVolume(volume, 0.5);
             if(closeVol > 0) {
                if(m_trade.PositionClosePartial(ticket, closeVol)) {
                   m_posStates[stateIdx].partial_close_count = 1;
-                  // 移動止損至成本
+                  // [重要] 移動止損至成本 (Breakeven)
                   m_trade.PositionModify(ticket, openPrice, 0);
                   Print("1st TP (50%): ", tpReason, " | MaxR: ", DoubleToString(m_posStates[stateIdx].max_r_reached, 2));
                }
