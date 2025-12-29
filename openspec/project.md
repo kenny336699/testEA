@@ -1,88 +1,101 @@
-Project Context: EMA Pullback Pro EA
-Purpose
-開發並維護一個用於 MetaTrader 5 (MT5) 的全自動智能交易系統 (Expert Advisor)。 該專案的目標是執行一個「趨勢跟隨 + 回調進場」策略 (Trend Following Pullback)，專注於捕捉強勢趨勢中的回檔機會。策略強調多週期確認、動態資金管理以及基於動量 (Momentum) 的出場機制。
+# Project Context
 
-Tech Stack
-Language: MQL5 (MetaQuotes Language 5)
+## Purpose
 
-Platform: MetaTrader 5 Client Terminal
+EMA Pullback Expert Advisor (EA) for MetaTrader 5 - An automated forex trading system that uses EMA crossovers, RSI filtering, and multi-timeframe analysis to identify and execute pullback trading opportunities.
 
-Libraries: Standard Library (Trade\Trade.mqh)
+### Key Features:
 
-Project Conventions
-Code Style
-Naming:
+- EMA-based trend detection (Fast/Mid/Trend EMA)
+- RSI multi-state filtering with bullish mode activation
+- Multi-timeframe confirmation (M5 and M15)
+- Smart money management with win/loss lot adjustment
+- Pyramiding support with risk-based position sizing
+- Partial profit taking at multiple levels
+- Trailing exit strategy
 
-輸入變數 (Inputs) 使用 Inp 前綴 (如 InpEMA_Fast)。
+## Tech Stack
 
-指標 Handle 使用 h 前綴 (如 hEMA20)。
+- **Language**: MQL5 (MetaQuotes Language 5)
+- **Platform**: MetaTrader 5
+- **Trading Library**: Trade.mqh
+- **Version**: 3.92
 
-指標 Buffer 使用 buf 前綴 (如 bufEMA20)。
+## Project Conventions
 
-全域變數/狀態使用 camelCase。
+### Code Style
 
-Formatting: - 使用 #property strict 確保嚴格編譯模式。
+- Use descriptive variable names with camelCase
+- Global variables prefixed by type (h for handles, buf for buffers)
+- Input parameters grouped by functionality
+- Comments in Chinese for parameter descriptions
+- Magic number for order identification: 20250304
 
-關鍵邏輯區塊需包含註解說明 (如 // TP1 Logic).
+### Architecture Patterns
 
-Structure: 所有的交易邏輯 (Entry, Exit, Management) 必須封裝在獨立的函數中，保持 OnTick 簡潔。
+- **Event-Driven**: OnInit(), OnTick(), OnDeinit(), OnTradeTransaction()
+- **State Management**: PositionState struct to track position metadata
+- **Indicator Management**: Separate handles and buffers for each indicator
+- **Visual Feedback**: Optional chart objects for signal visualization
+- **Modular Functions**: Separate functions for entry signals, position management, lot sizing
 
-Architecture Patterns
-Event-Driven: 主要邏輯掛載於 OnTick() 事件；訂單成交確認掛載於 OnTradeTransaction()。
+### Testing Strategy
 
-State Management: 使用自定義結構體 struct PositionState 來追蹤 broker 端無法儲存的訂單狀態（例如：「此訂單是否曾經觸及 RSI 70」、「最大浮盈 R 倍數」）。
+- Backtest on historical data in Strategy Tester
+- Forward test on demo account before live deployment
+- Monitor R multiples and partial close counts
+- Track RSI hit 70 events and max R reached metrics
 
-Signal Logic: 採用「過濾器 (Filters) -> 觸發器 (Triggers) -> 執行 (Execution)」的順序處理。
+### Git Workflow
 
-Testing Strategy
-Backtesting: 必須在 MT5 策略測試器 (Strategy Tester) 中使用 "Every tick" 模式進行回測。
+- Main branch: `main`
+- Commit messages should describe strategy changes
+- Test thoroughly before committing changes to production EA
 
-Visual Debugging: 啟用 InpShowVisual 參數，檢查圖表上的箭頭 (Signal Arrow) 與進場線 (Entry Line) 是否符合預期邏輯。
+## Domain Context
 
-Logging: 關鍵狀態變化 (如 Bullish Mode 切換、TP 觸發) 需使用 Print() 輸出至日誌。
+### Trading Strategy
 
-Git Workflow
-由於 MQL5 通常為單一文件開發，版本控制採用文件名版本號管理 (e.g., \_v3.8).
+**Pullback Trading System**:
 
-Major changes (邏輯變更) 增加小數點第一位；Minor changes (參數/修復) 增加小數點第二位。
+1. **Trend Identification**: Price above EMA200, EMA20 > EMA200
+2. **Entry Trigger**: Price pullback touches EMA20, RSI < 70
+3. **Multi-Timeframe Filter**: M5 and M15 RSI >= 60 (optional)
+4. **Entry**: Buy Stop order above pullback candle high
+5. **Stop Loss**: Below pullback candle low
+6. **Target**: Historical 20-bar high
 
-Domain Context
-Trading Strategy Logic
-Trend Definition: EMA 20 > EMA 200 (僅做多)。
+**Exit Strategy**:
 
-Momentum Filter (Hysteresis):
+- First TP (50%): RSI hit 70 + pullback to EMA10, OR reached target high, OR reached EMA200, OR pullback protection
+- Second TP (remaining): RSI extreme + below EMA10, OR below EMA20
+- Stop loss moved to breakeven after first TP
 
-RSI(14) > 60 啟動多頭模式。
+### Key Parameters
 
-RSI(14) < 52 關閉多頭模式。
+- **EMA Fast**: 10 (entry/exit reference)
+- **EMA Mid**: 20 (pullback level)
+- **EMA Trend**: 200 (trend filter)
+- **RSI Period**: 14
+- **RSI Enable**: 60 (bullish mode activation)
+- **RSI Disable**: 52 (bullish mode deactivation)
+- **RSI Max**: 70 (entry filter)
+- **RSI Extreme**: 75 (aggressive exit)
+- **Pyramiding R**: 1.0R (add positions when winning)
+- **Max Positions**: 5
 
-MTF Confirmation: M5 與 M15 週期的 RSI 必須同時 > 60。
+## Important Constraints
 
-Entry Trigger: 價格回調觸碰 EMA 20 (Low <= EMA20)，且 RSI < 70 (不過熱)，在該 K 線高點掛 Buy Stop。
+- **Broker Requirements**: Supports FOK/IOC filling modes
+- **Minimum Lot**: Configurable via InpMinLots (default 0.04)
+- **Slippage Tolerance**: 20 points default
+- **Order Expiry**: Pending orders expire after 1 bar
+- **Position Tracking**: Uses comment field to store R distance and target high
+- **Visual Objects**: Prefixed with "Signal*" and "Setup*"
 
-Exit Rules:
+## External Dependencies
 
-Dynamic TP: 當 RSI 衝高過 70 後，價格回落觸碰 EMA 10 時，平倉 50% 並設為損益兩平 (BE)。
-
-Structure TP: 觸碰 EMA 200 或近期高點平倉 50%。
-
-Trailing Stop: 基於 EMA 10 或 EMA 20 的移動止損。
-
-Money Management
-Smart Lots: 混合型資金管理。贏單加碼 (Martingale-like) 上限 4 次；輸單減碼 (Anti-Martingale)。
-
-Pyramiding: 金字塔加倉，僅當現有持倉獲利 > 1R 時才允許新開倉。
-
-Important Constraints
-Order Type: 策略使用 Buy Stop 掛單，而非市價單 (Market Order)。
-
-Expiration: 掛單僅在當前 K 線有效，未成交即刪除 (OnTick 中檢查)。
-
-Magic Number: 必須固定為 20250304 以識別本策略的訂單，避免與其他 EA 衝突。
-
-Broker Requirements: 需要經紀商支持 Hedging (對沖) 帳戶模式，以便同時持有多張單。
-
-External Dependencies
-Market Data: 依賴經紀商提供的即時 Tick 數據與歷史 K 線數據 (Current, M5, M15)。
-
-Trade Execution: 依賴 CTrade 類別處理訂單發送與修改。
+- MetaTrader 5 platform
+- Trade.mqh library (standard MT5 library)
+- Broker with symbol data and order execution capabilities
+- Indicators: iMA (EMA), iRSI (RSI)
